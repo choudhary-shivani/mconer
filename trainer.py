@@ -49,8 +49,8 @@ ds.read_data(data=r'C:\Users\Rah12937\PycharmProjects\mconern\multiconer2022\EN-
 valid = CoNLLReader(target_vocab=wnut_iob)
 valid.read_data(data=r'C:\Users\Rah12937\PycharmProjects\mconern\multiconer2022\EN-English\en_dev.conll')
 
-# test = CoNLLReader(target_vocab=wnut_iob)
-# test.read_data(data=r'C:\Users\Rah12937\PycharmProjects\mconern\multiconer2022\EN-English\en_dev.conll')
+test = CoNLLReader(target_vocab=wnut_iob)
+test.read_data(data=r'C:\Users\Rah12937\PycharmProjects\mconern\multiconer2022\EN-English\en_dev.conll')
 
 
 device = 'cpu'
