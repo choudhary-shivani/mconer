@@ -29,7 +29,8 @@ class NERmodelbase(nn.Module):
 
     def forward(self, x, mode=''):
         tokens, tags, mask, token_mask, metadata = x
-        tokens, mask, token_mask, tags = tokens.to(self.device), mask.to(self.device),\
+        # print(tokens, mask, token_mask, metadata, tags)
+        tokens, mask, token_mask, tags = tokens.to(self.device), mask.to(self.device), \
                                          token_mask.to(self.device), tags.to(self.device)
         base_shape = tokens.size(0)
         embedded_text_input = self.encoder(input_ids=tokens, attention_mask=mask)
@@ -41,6 +42,7 @@ class NERmodelbase(nn.Module):
         token_scores = F.log_softmax(token_scores, dim=-1)
 
         # compute the log-likelihood loss and compute the best NER annotation sequence
+        # print(tags)
         output = self._compute_token_tags(token_scores=token_scores, mask=mask, tags=tags,
                                           metadata=metadata, batch_size=base_shape, mode=mode)
         return output
@@ -53,9 +55,11 @@ class NERmodelbase(nn.Module):
         pred_results, pred_tags = [], []
         for i in range(batch_size):
             tag_seq, _ = best_path[i]
+            # print(tag_seq)
             pred_tags.append([self.id_to_tag[x] for x in tag_seq])
             pred_results.append(extract_spans([self.id_to_tag[x] for x in tag_seq if x in self.id_to_tag]))
-
+        # print(pred_tags, pred_results)
+        # print("Val", pred_results, metadata)
         self.spanf1(pred_results, metadata)
         output = {"loss": loss, "results": self.spanf1.get_metric()}
 

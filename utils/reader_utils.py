@@ -3,7 +3,9 @@ import itertools
 
 
 def get_ner_reader(data):
-    fin = gzip.open(data, 'rt',encoding='utf8', errors='ignore') if data.endswith('.gz') else open(data, 'rt' ,encoding='utf8', errors='ignore')
+    fin = gzip.open(data, 'rt', encoding='utf8', errors='ignore') if data.endswith('.gz') else open(data, 'rt',
+                                                                                                    encoding='utf8',
+                                                                                                    errors='ignore')
     for is_divider, lines in itertools.groupby(fin, _is_divider):
         if is_divider:
             continue
@@ -12,13 +14,13 @@ def get_ner_reader(data):
         metadata = lines[0].strip() if lines[0].strip().startswith('# id') else None
         fields = [line.split() for line in lines if not line.startswith('# id')]
         fields = [list(field) for field in zip(*fields)]
-
         yield fields, metadata
 
 
 def _assign_ner_tags(ner_tag, rep_):
     '''
-    Changing the token_masks so that only the first sub_word of a token has a True value, while the rest is False. This will be used for storing the predictions.
+    Changing the token_masks so that only the first sub_word of a token has a True value,
+    while the rest is False. This will be used for storing the predictions.
     :param ner_tag:
     :param rep_:
     :return:
