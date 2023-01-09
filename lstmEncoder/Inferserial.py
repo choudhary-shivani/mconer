@@ -18,9 +18,12 @@ class InferSerialData(Dataset):
             and c in self.all_chars
         )
 
-    def convert(self, line):
-        temp = map(lambda a: self.all_chars_dict.get(a, self.num_char), self.unicodeToAscii(line))
-        all_data = torch.tensor(list(temp))
-        if all_data.size()[0] == 0:
-            all_data = torch.tensor([57])
-        return all_data
+    def convert(self, lines):
+        return_data = []
+        for line in lines:
+            temp = map(lambda a: self.all_chars_dict.get(a, self.num_char), self.unicodeToAscii(line))
+            all_data = torch.tensor(list(temp))
+            if all_data.size()[0] == 0:
+                all_data = torch.tensor([57])
+            return_data.append(all_data)
+        return return_data

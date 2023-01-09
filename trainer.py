@@ -14,14 +14,16 @@ from tensorboardX import SummaryWriter
 # from utils import mconern, encoder_model, tokenizer
 from reader import *
 from tqdm import tqdm
+from kornia.losses import FocalLoss
 
 # sys.exit(0)
 run_id = random.randint(1, 10000)
 writer = SummaryWriter(f"runid_{run_id}/_EP_{NUM_EPOCH}__num_bs_{BATCH_SIZE}")
 step = 0
 running_loss = 0
-early_stopping = EarlyStopping(patience=6, verbose=True, path='fine_xlm-b.pt')
+early_stopping = EarlyStopping(patience=6, verbose=True, path='fine_xlm-b-mixed-focal-loss-sep-lr.pt')
 eval_step = 50
+# fl = FocalLoss()
 # print(next(iter(trainloader)))
 
 print(model)
@@ -33,8 +35,8 @@ for epoch in range(NUM_EPOCH):
         tepoch.set_description(f"Epoch {epoch}")
         for i, data in enumerate(tepoch):
             optim[0].zero_grad()
-            outputs = model(data)
-            loss = outputs['loss']
+            outputs, focal_loss = model(data)
+            loss = 0.5*outputs['loss'] + 0.5*focal_loss
             running_loss += loss
             loss.backward()
             optim[0].step()
@@ -51,8 +53,8 @@ for epoch in range(NUM_EPOCH):
                         val_loss = 0
 
                         for i, data in enumerate(tepoch):
-                            outputs = model(data, mode='predict')
-                            val_loss += outputs['loss']
+                            outputs, focal_loss = model(data, mode='predict')
+                            val_loss += 0.5*outputs['loss'] + 0.5*focal_loss
                 model.train()
                 writer.add_scalars("Loss",
                                    {

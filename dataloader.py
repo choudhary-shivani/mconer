@@ -1,5 +1,7 @@
 import numpy as np
 import torch
+from copy import deepcopy
+from torch.nn.utils.rnn import pad_sequence
 from torch import nn
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
@@ -54,16 +56,15 @@ class CoNLLReader(Dataset):
             all_tags += fields[-1]
             if self._max_instances != -1 and instance_idx > self._max_instances:
                 break
-            sentence_str, tokens_sub_rep, token_masks_rep, coded_ner_, gold_spans_, mask = self.parse_line_for_ner(
+            sentence_str, tokens_sub_rep, token_masks_rep, coded_ner_, gold_spans_, mask, lstm_encoded = self.parse_line_for_ner(
                 fields=fields)
             # print(sentence_str, tokens_sub_rep, token_masks_rep, coded_ner_, gold_spans_, mask)
-
             tokens_tensor = torch.tensor(tokens_sub_rep, dtype=torch.long)
             tag_tensor = torch.tensor(coded_ner_, dtype=torch.long).unsqueeze(0)
             token_masks_rep = torch.tensor(token_masks_rep)
             mask_rep = torch.tensor(mask)
-
-            self.instances.append((tokens_tensor, mask_rep, token_masks_rep, gold_spans_, tag_tensor))
+            # print(tag_tensor)
+            self.instances.append((tokens_tensor, mask_rep, token_masks_rep, gold_spans_, tag_tensor, lstm_encoded))
             instance_idx += 1
         print('Finished reading {:d} instances from file {}'.format(len(self.instances), dataset_name))
         # all_tags = list(np.unique(np.array(all_tags)))
@@ -113,21 +114,25 @@ class CoNLLReader(Dataset):
         ner_tags_rep.append('O')
         token_masks_rep.append(False)
         mask = [True] * len(tokens_sub_rep)
-        lstm_encoded = []
         sent = ''
         # lstm_encoded.append(list(self.lstm.named_children())[0][1](torch.tensor(57).to('cuda')))
         # print(lstm_encoded)
         # print(sentence_str.split())
+        all_sent_piece = []
         for i in sentence_str.split():
             sent += i
-            encoded = self.lstmdata.convert(sent)
-            print(encoded)
-            x, y = self.lstm(torch.tensor(encoded).unsqueeze(0))
-            lstm_encoded.append(torch.mean(y, dim=0, keepdim=True))
+            all_sent_piece.append(deepcopy(sent))
+        all_converted = self.lstmdata.convert(all_sent_piece)
+        encoded = pad_sequence(all_converted, padding_value=57, batch_first=True)
+
+        # print(encoded.shape)
+
+        x, y = self.lstm(torch.tensor(encoded))
+        lstm_encoded = torch.mean(y, dim=0, keepdim=True).squeeze(0)
         # lstm_encoded.append(list(self.lstm.named_children())[0][1](torch.tensor(57).to('cuda')))
-        lstm_encoded = torch.stack(lstm_encoded, dim=2).squeeze(0)
+        # lstm_encoded = torch.stack(lstm_encoded, dim=2).squeeze(0)
         # print(lstm_encoded.shape)
-        return sentence_str, tokens_sub_rep, ner_tags_rep, token_masks_rep, mask, lstm_encoded
+        return sentence_str, tokens_sub_rep, ner_tags_rep, token_masks_rep, mask, lstm_encoded.detach().cpu()
 
 
 if __name__ == '__main__':

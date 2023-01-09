@@ -124,7 +124,11 @@ def invert(grouped):
 
 
 def get_optimizer(net, opt=False, warmup=10):
-    optimizer = torch.optim.AdamW(net.parameters(), lr=1e-5, weight_decay=0.03)
+    lr = 1e-5
+    all_params = ({'params': net.encoder.parameters(), 'lr': lr},
+                  {'params': net.ff.parameters(), 'lr': lr},
+                  {'params': net.crf_layer.parameters(), 'lr': lr * 100})
+    optimizer = torch.optim.AdamW(all_params, lr=lr, weight_decay=0.01)
     if opt:
         scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup)
         return [optimizer], [scheduler]
