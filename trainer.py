@@ -24,7 +24,7 @@ early_stopping = EarlyStopping(patience=6, verbose=True, path='fine_xlm-b.pt')
 eval_step = 50
 # print(next(iter(trainloader)))
 
-# print(model)
+print(model)
 # sys.exit(2)
 for epoch in range(NUM_EPOCH):
     val_track = []

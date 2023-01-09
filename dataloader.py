@@ -4,6 +4,8 @@ from torch import nn
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 from utils.reader_utils import _assign_ner_tags, get_ner_reader, extract_spans
+from lstmEncoder.customlstm import CustomLSTM
+from lstmEncoder.Inferserial import InferSerialData
 
 
 class CoNLLReader(Dataset):
@@ -25,6 +27,9 @@ class CoNLLReader(Dataset):
         self.instances = []
         self.fine = finegrained
         self.reversemap = reversemap
+        self.lstmdata = InferSerialData()
+        self.lstm = CustomLSTM(58, 256, num_layers=2).to('cuda')
+        self.lstm.load_state_dict(torch.load(r'.\lstmEncoder\lstm_model.pt'))
         print(self.fine)
 
     def get_target_size(self):
@@ -66,7 +71,7 @@ class CoNLLReader(Dataset):
 
     def parse_line_for_ner(self, fields):
         tokens_, ner_tags = fields[0], fields[-1]
-        sentence_str, tokens_sub_rep, ner_tags_rep, token_masks_rep, mask = self.parse_tokens_for_ner(tokens_, ner_tags)
+        sentence_str, tokens_sub_rep, ner_tags_rep, token_masks_rep, mask, lstm_encoded = self.parse_tokens_for_ner(tokens_, ner_tags)
         gold_spans_ = extract_spans(ner_tags_rep)
         # print(gold_spans_)
         if not self.fine:
@@ -83,7 +88,7 @@ class CoNLLReader(Dataset):
             coded_ner_ = [self.label_to_id[tag] if tag in self.label_to_id else self.label_to_id['O'] for tag in
                           ner_tags_rep]
 
-        return sentence_str, tokens_sub_rep, token_masks_rep, coded_ner_, gold_spans_, mask
+        return sentence_str, tokens_sub_rep, token_masks_rep, coded_ner_, gold_spans_, mask, lstm_encoded
 
     def parse_tokens_for_ner(self, tokens_, ner_tags):
         sentence_str = ''
@@ -108,7 +113,21 @@ class CoNLLReader(Dataset):
         ner_tags_rep.append('O')
         token_masks_rep.append(False)
         mask = [True] * len(tokens_sub_rep)
-        return sentence_str, tokens_sub_rep, ner_tags_rep, token_masks_rep, mask
+        lstm_encoded = []
+        sent = ''
+        # lstm_encoded.append(list(self.lstm.named_children())[0][1](torch.tensor(57).to('cuda')))
+        # print(lstm_encoded)
+        # print(sentence_str.split())
+        for i in sentence_str.split():
+            sent += i
+            encoded = self.lstmdata.convert(sent)
+            print(encoded)
+            x, y = self.lstm(torch.tensor(encoded).unsqueeze(0))
+            lstm_encoded.append(torch.mean(y, dim=0, keepdim=True))
+        # lstm_encoded.append(list(self.lstm.named_children())[0][1](torch.tensor(57).to('cuda')))
+        lstm_encoded = torch.stack(lstm_encoded, dim=2).squeeze(0)
+        # print(lstm_encoded.shape)
+        return sentence_str, tokens_sub_rep, ner_tags_rep, token_masks_rep, mask, lstm_encoded
 
 
 if __name__ == '__main__':

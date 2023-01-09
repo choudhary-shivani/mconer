@@ -6,3 +6,8 @@ runid_*
 multiconer2023
 multiconer2022
 .ipynb_checkpoints
+lstmEncoder/Run*
+*/*tsv
+*.json
+*/*csv
+*csv

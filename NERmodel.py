@@ -36,7 +36,7 @@ class NERmodelbase(nn.Module):
         embedded_text_input = self.encoder(input_ids=tokens, attention_mask=mask)
         embedded_text_input = embedded_text_input.last_hidden_state
         embedded_text_input = self.dropout(F.leaky_relu(embedded_text_input))
-
+        # print(embedded_text_input.shape)
         # project the token representation for classification
         token_scores = self.ff(embedded_text_input)
         token_scores = F.log_softmax(token_scores, dim=-1)
@@ -66,3 +66,7 @@ class NERmodelbase(nn.Module):
         if mode == 'predict':
             output['token_tags'] = pred_tags
         return output
+
+#
+# if __name__ == '__main__':
+#     model = NERmodelbase(tag_to_id=mconern, device=device, encoder_model=encoder_model, dropout=0.3).to(device)
