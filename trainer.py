@@ -58,7 +58,7 @@ def collate_batch(batch):
 def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=26, ratio=0.2):
     print(force)
     if os.path.exists('train_load.pkl') and not force:
-        with open('valid_load.pkl', 'rb') as f:
+        with open('train_load.pkl', 'rb') as f:
             ds = pickle.load(f)
     else:
         print("reading from disk")
@@ -99,10 +99,6 @@ def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=26, ratio=0.2):
     step = 0
     running_loss = 0
     early_stopping = EarlyStopping(patience=10, verbose=True, path=run_name + '.pt')
-    # eval_step = 100
-    # fl = FocalLoss()
-    # print(next(iter(trainloader)))
-    # sys.exit(2)
     for epoch in range(NUM_EPOCH):
         val_track = []
         with tqdm(trainloader, unit='batch') as tepoch:
@@ -116,9 +112,7 @@ def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=26, ratio=0.2):
                 loss.backward()
                 optim[0].step()
                 scheduler[0].step()
-                # if i % 10 == 0:  # print every 2000 mini-batches
                 model.spanf1.reset()
-                # writer.add_scalar('lr', scheduler[0].get_last_lr()[0], step)
                 # run validation
                 step += 1
                 if (step + 1) % eval_step == 0:
@@ -156,12 +150,9 @@ def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=26, ratio=0.2):
                         return
                     conf_mat = (confmat(
                         torch.tensor(all_tags), torch.tensor(all_predicted_tags)
-                        # np.array(all_predicted_tags).ravel()
                     ))
-                    # im = image_gen(conf_mat, mconern)
-                    # writer.add_image("val_confusion_matrix", im, global_step=step)
-                    pd.DataFrame(conf_mat.numpy(), columns=mconern.keys(), dtype=int).to_csv(f'confusion_mat{step}.csv', index=False)
-                    # print(np.array(all_tags).ravel().shape, np.array(all_predicted_tags).ravel().shape)
-        # print(all_tags, all_predicted_tags)
+                    mat = pd.DataFrame(conf_mat.numpy(), columns=mconern.keys(), dtype=int)
+                    mat["idx"] = mconern.keys()
+                    mat.to_csv(f'confusion_mat{step}.csv', index=False)
     writer.close()
 
