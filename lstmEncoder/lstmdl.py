@@ -16,7 +16,7 @@ def collate_batch(batch):
     for i in range(len(tokens)):
         tokens_ = tokens[i]
         seq_len = len(tokens_)
-        token_tensor[i, -seq_len:] = tokens_
+        token_tensor[i, 0:seq_len] = tokens_
 
     return token_tensor, label
 
@@ -27,6 +27,6 @@ sd.readLines(train=True)
 vd = Serialdata('combined.tsv')
 vd.readLines(train=False)
 
-trainloader = DataLoader(sd, batch_size=256, collate_fn=collate_batch, shuffle=True)
+trainloader = DataLoader(sd, batch_size=128, collate_fn=collate_batch, shuffle=True)
 validloader = DataLoader(sd, batch_size=256, collate_fn=collate_batch, shuffle=True)
 

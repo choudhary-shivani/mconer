@@ -30,7 +30,8 @@ class CoNLLReader(Dataset):
         self.fine = finegrained
         self.reversemap = reversemap
         self.lstmdata = InferSerialData()
-        self.lstm = CustomLSTM(58, 256, num_layers=2).to('cuda')
+        print("Loding LSTM model")
+        self.lstm = CustomLSTM(58, 128, num_layers=1).to('cuda')
         self.lstm.load_state_dict(torch.load(r'.\lstmEncoder\lstm_model.pt'))
         print(self.fine)
 

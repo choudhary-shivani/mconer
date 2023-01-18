@@ -1,9 +1,15 @@
 import torch
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sn
+import io
+from PIL import Image
+import torchvision
 from transformers import AutoTokenizer
 
 encoder_model = 'xlm-roberta-base'
 tokenizer = AutoTokenizer.from_pretrained(encoder_model)
-from transformers import get_constant_schedule_with_warmup
+from transformers import get_constant_schedule_with_warmup, get_cosine_with_hard_restarts_schedule_with_warmup
 
 mconer_grouped = {
     'CW': {
@@ -127,9 +133,51 @@ def get_optimizer(net, opt=False, warmup=10):
     lr = 1e-5
     all_params = ({'params': net.encoder.parameters(), 'lr': lr},
                   {'params': net.ff.parameters(), 'lr': lr},
-                  {'params': net.crf_layer.parameters(), 'lr': lr * 100})
+                  {'params': net.crf.parameters(), 'lr': lr * 100},
+                  {'params': net.birnn.parameters(), 'lr': lr * 100},
+                  {'params': net.w_omega, 'lr': lr * 100},
+                  {'params': net.ratio, 'lr': lr * 100},
+                  )
     optimizer = torch.optim.AdamW(all_params, lr=lr, weight_decay=0.01)
     if opt:
         scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup)
+        # scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(optimizer, num_warmup_steps=warmup, num_cycles=2, num)
         return [optimizer], [scheduler]
     return [optimizer]
+
+
+class IntHandler:
+    def legend_artist(self, legend, orig_handle, fontsize, handlebox):
+        x0, y0 = handlebox.xdescent, handlebox.ydescent
+        text = plt.matplotlib.text.Text(x0, y0, str(orig_handle))
+        handlebox.add_artist(text)
+        return text
+
+
+def image_gen(computed_confusion, mconern):
+
+    # confusion matrix
+    df_cm = pd.DataFrame(
+        computed_confusion.numpy(),
+        index=mconern.values(),
+        columns=mconern.values(),
+    )
+
+    fig, ax = plt.subplots(figsize=(22, 22))
+    fig.subplots_adjust(left=0.05, right=.65)
+    sn.set(font_scale=1.2)
+    sn.heatmap(df_cm, annot=False, annot_kws={"size": 12}, fmt='d', ax=ax)
+    # ax.legend(
+    #     mconern.values(),
+    #     mconern.keys(),
+    #     handler_map={int: IntHandler()},
+    #     loc='upper left',
+    #     bbox_to_anchor=(1.2, 1)
+    # )
+    buf = io.BytesIO()
+
+    plt.savefig(buf, format='jpeg', bbox_inches='tight')
+    buf.seek(0)
+    im = Image.open(buf)
+    im = torchvision.transforms.ToTensor()(im)
+    return im

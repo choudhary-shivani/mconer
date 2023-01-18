@@ -20,24 +20,27 @@ class CustomLSTM(nn.Module):
                          hidden_size=self.hidden,
                          num_layers=self.num_layers,
                          batch_first=True,
-                         dropout=dropout
+                         dropout=dropout,
+                         bidirectional=True
                          )
         self.dropout = nn.Dropout(0.1)
         # print(sd.tag_to_id)
-        self.ff1 = nn.Linear(self.hidden, self.hidden//2)
-        self.ff = nn.Linear(self.hidden//2, 5)
+        self.ff1 = nn.Linear(self.hidden*2, self.hidden)
+        self.ff = nn.Linear(self.hidden, 5)
 
     def forward(self, x):
         batch_size = x.size(0)
         out = self.embed(x.to(device))
-        self.h0 = torch.zeros(self.num_layers, batch_size, self.hidden, dtype=
+        self.h0 = torch.zeros(2*self.num_layers, batch_size, self.hidden, dtype=
         torch.float).to(device).requires_grad_()
-        self.c0 = torch.zeros(self.num_layers, batch_size, self.hidden,
+        self.c0 = torch.zeros(2*self.num_layers, batch_size, self.hidden,
                               dtype=torch.float).to(device).requires_grad_()
         # lstm_out, _ = self.lstm(x.view(len(x), 1, -1))
-        _, (self.h0, self.c0) = self.lstm(out, (self.h0, self.c0))
-        # print(self.h0.shape)
+        out , (self.h0, self.c0) = self.lstm(out, (self.h0, self.c0))
+        # print(out.shape)
+        h_comb = torch.cat([self.h0[-1], self.h0[-2]], dim=-1)
+        # print(h_comb)
         # val = self.dropout(self.h0.mean(dim=0, keepdim=True))
-        out = self.ff1(self.h0[-1])
+        out = self.ff1(h_comb)
         out = self.ff(out)
-        return out, self.h0
+        return out, h_comb

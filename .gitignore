@@ -11,3 +11,6 @@ lstmEncoder/Run*
 *.json
 */*csv
 *csv
+*zip
+*pkl
+*7z

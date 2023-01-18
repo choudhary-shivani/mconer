@@ -14,7 +14,7 @@ class Serialdata(Dataset):
         self.all_data = pd.read_csv(filedir, sep='\t').dropna()
         self.classes = self.all_data['label'].unique()
         self.num_classes = len(self.classes)
-        # self.all_data = self.all_data[:100000]
+        # self.all_data = self.all_data[:10000]
         self.tag_to_id = {v: k for k, v in enumerate(self.classes)}
         self.all_data['mapped'] = self.all_data['combined'].apply(self.unicodeToAscii)
         self.all_chars_dict = {v: k for k, v in enumerate(self.all_chars)}
