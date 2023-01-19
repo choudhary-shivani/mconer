@@ -132,11 +132,11 @@ def invert(grouped):
 def get_optimizer(net, opt=False, warmup=10):
     lr = 1e-5
     all_params = ({'params': net.encoder.parameters(), 'lr': lr},
-                  {'params': net.ff.parameters(), 'lr': lr},
+                  {'params': net.ff.parameters(), 'lr': lr*10},
                   {'params': net.crf.parameters(), 'lr': lr * 100},
                   {'params': net.birnn.parameters(), 'lr': lr * 100},
-                  {'params': net.w_omega, 'lr': lr * 100},
-                  {'params': net.ratio, 'lr': lr * 100},
+                  {'params': net.w_omega, 'lr': lr * 10},
+                  {'params': net.ff1.parameters(), 'lr': lr * 10},
                   )
     optimizer = torch.optim.AdamW(all_params, lr=lr, weight_decay=0.01)
     if opt:

@@ -18,7 +18,7 @@ class NERmodelbase(nn.Module):
         self.id_to_tag = {v: k for k, v in self.tag_to_id.items()}
         self.encoder_model = encoder_model
         self.encoder = AutoModel.from_pretrained(self.encoder_model)
-        self.ratio = torch.nn.init.uniform_(torch.nn.Parameter(torch.randn([2])))
+        # self.ratio = torch.nn.init.uniform_(torch.nn.Parameter(torch.randn([2])))
         if use_lstm:
             self.rnn_dim = self.encoder.config.hidden_size // 2
             self.birnn = nn.LSTM(256, self.rnn_dim, num_layers=1, bidirectional=True,
@@ -26,7 +26,9 @@ class NERmodelbase(nn.Module):
             self.w_omega = nn.Parameter(torch.Tensor(self.encoder.config.hidden_size + (self.rnn_dim * 2), 1))  # 用于门机制学习的矩阵
             nn.init.uniform(self.w_omega, -0.1, 0.1)
 
-        self.ff = nn.Linear(in_features=self.encoder.config.hidden_size,
+        self.ff1 = nn.Linear(in_features=self.encoder.config.hidden_size,
+                             out_features=self.encoder.config.hidden_size//2)
+        self.ff = nn.Linear(in_features=self.encoder.config.hidden_size//2,
                             out_features=len(self.id_to_tag))
         self.crf = ConditionalRandomField(num_tags=len(self.id_to_tag),
                                           constraints=allowed_transitions('BIO',
@@ -57,7 +59,8 @@ class NERmodelbase(nn.Module):
             embedded_text_input = ratio * embedded_text_input + (1 - ratio) * bilstm_out
         # print(embedded_text_input.shape, bilstm_out.shape, ratio.shape)
         # project the token representation for classification
-        token_scores = self.ff(embedded_text_input)
+        token_score = self.ff1(embedded_text_input)
+        token_scores = self.ff(token_score)
         focal_loss = self.fl(token_scores.permute(0, 2, 1), tags)
         # print(focal_loss)
         # print(tags.shape, token_scores.shape)
@@ -88,7 +91,8 @@ class NERmodelbase(nn.Module):
         # print(pred_tags, pred_results)
         # print("Val", pred_results, metadata)
         self.spanf1(pred_results, metadata)
-        output = {"loss": loss, "results": self.spanf1.get_metric(), "best_path": best_path}
+        # print("Inside model", self.spanf1.get_metric())
+        output = {"loss": loss, "results": self.spanf1.get_metric()}
 
         if mode == 'predict':
             output['token_tags'] = pred_tags

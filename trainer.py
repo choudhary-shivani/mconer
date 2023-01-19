@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import sys
 
@@ -10,12 +12,13 @@ from torch.utils.data import DataLoader
 from NERmodel import NERmodelbase
 from dataloader import CoNLLReader
 from pytorchtools import EarlyStopping
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 # from torch.utils.tensorboard import SummaryWriter
 from utils import *
 from tensorboardX import SummaryWriter
 # from utils import mconern, encoder_model, tokenizer
 from reader import *
-from tutils import image_gen
+# from tutils import image_gen
 from tqdm import tqdm
 from kornia.losses import FocalLoss
 from torchmetrics.classification import MulticlassConfusionMatrix, MulticlassRecall, MulticlassPrecision, MulticlassF1Score
@@ -55,8 +58,8 @@ def collate_batch(batch):
     return token_tensor, tag_tensor, mask_tensor, token_masks_tensor, gold_spans, lstm_encoded_tensor
 
 
-def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=26, ratio=0.2):
-    print(force)
+def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=100, ratio=0.2):
+
     if os.path.exists('train_load.pkl') and not force:
         with open('train_load.pkl', 'rb') as f:
             ds = pickle.load(f)
@@ -75,10 +78,10 @@ def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=26, ratio=0.2):
         valid.read_data(data=r'C:\Users\Rah12937\PycharmProjects\mconer\multiconer2023\train_dev\en-dev.conll')
         with open('valid_load.pkl', 'wb') as f:
             pickle.dump(valid, f)
-    confmat = MulticlassConfusionMatrix(num_classes=len(mconern))
-    pred = MulticlassPrecision(num_classes=len(mconern), average=None)
-    recall = MulticlassRecall(num_classes=len(mconern), average=None)
-    f1 = MulticlassF1Score(num_classes=len(mconern), average=None)
+    # confmat = MulticlassConfusionMatrix(num_classes=len(mconern))
+    # pred = MulticlassPrecision(num_classes=len(mconern), average=None)
+    # recall = MulticlassRecall(num_classes=len(mconern), average=None)
+    # f1 = MulticlassF1Score(num_classes=len(mconern), average=None)
     # test = CoNLLReader(target_vocab=mconern, encoder_model=encoder_model)
     # test.read_data(data=r'C:\Users\Rah12937\PycharmProjects\mconern\multiconer2022\EN-English\en_dev.conll')
 
@@ -89,12 +92,21 @@ def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=26, ratio=0.2):
     print(model)
     trainloader = DataLoader(ds, batch_size=BATCH_SIZE, collate_fn=collate_batch, num_workers=0, shuffle=True)
     validloader = DataLoader(valid, batch_size=BATCH_SIZE, collate_fn=collate_batch, num_workers=0)
-    WARMUP_STEP = int(len(trainloader) * NUM_EPOCH * 0.2)
+    WARMUP_STEP = int(len(trainloader) * NUM_EPOCH * 0.2) // 20
     print(f"Number of warm up step is {WARMUP_STEP}")
     optim, scheduler = get_optimizer(model, True, warmup=WARMUP_STEP)
+    scheduler2 = ReduceLROnPlateau(optimizer=optim[0], factor=0.01, patience=20, verbose=True, cooldown=20)
 
     run_id = random.randint(1, 10000)
-    run_name = f"runid_{run_id}_EP_{NUM_EPOCH}_fine_xlm-b-birnnn-focal-loss-{1-ratio}-sep_lr-alpha-2-gama-4"
+    run_name = f"runid_{run_id}_EP_{NUM_EPOCH}_fine_xlm-b-birnnn-focal-loss-{0.8}-sep_lr-alpha-2-gama-4"
+    while True:
+        if os.path.exists(run_name):
+            run_id = random.randint(1, 10000)
+            run_name = f"runid_{run_id}_EP_{NUM_EPOCH}_fine_xlm-b-birnnn-focal-loss-{0.8}-sep_lr-alpha-2-gama-4"
+        else:
+            break
+    os.mkdir(run_name)
+    os.chdir(run_name)
     writer = SummaryWriter(run_name)
     step = 0
     running_loss = 0
@@ -107,31 +119,35 @@ def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=26, ratio=0.2):
             for i, data in enumerate(tepoch):
                 optim[0].zero_grad()
                 outputs, focal_loss = model(data)
-                loss = ratio * outputs['loss'] + (1-ratio) * focal_loss
+                loss = 0.2 * outputs['loss'] + 0.8 * focal_loss
                 running_loss += loss
                 loss.backward()
                 optim[0].step()
-                scheduler[0].step()
+                if (step +1 ) % 20 == 0:
+                    scheduler[0].step()
+                scheduler2.step(loss)
+                # if i % 10 == 0:  # print every 2000 mini-batches
                 model.spanf1.reset()
+                # writer.add_scalar('lr', scheduler2.get_last_lr()[0], step)
+                writer.add_scalar('lr', scheduler2._last_lr[0], step)
                 # run validation
                 step += 1
                 if (step + 1) % eval_step == 0:
-                    all_tags = []
-                    all_predicted_tags = []
+                    # all_tags = []
+                    # all_predicted_tags = []
                     model.eval()
                     with torch.no_grad():
                         with tqdm(validloader, unit='batch') as tepoch:
                             val_loss = 0
                             for i, data in enumerate(tepoch):
-                                tokens, tags, mask, token_mask, metadata, lstm_encoded = data
-                                all_tags += list(torch.masked_select(tags, mask).detach().cpu().numpy())
+                                # tokens, tags, mask, token_mask, metadata, lstm_encoded = data
+                                # all_tags += list(torch.masked_select(tags, mask).detach().cpu().numpy())
                                 # print(mask.shape, token_mask.shape)
                                 # all_tags += list(tags.clone().detach().cpu().numpy().ravel())
                                 outputs, focal_loss = model(data, mode='predict')
-                                for i in outputs['best_path']:
-                                    all_predicted_tags += i[0]
-                                # all_predicted_tags += [i[0] for i in outputs['best_path']]
-                                val_loss += ratio * outputs['loss'] + (1-ratio) * focal_loss
+                                # val_loss += 0.6 * outputs['loss'] + 0.4 * focal_loss
+                                val_loss += (0.2 * outputs['loss'] + 0.8 * focal_loss)
+                                # val_loss = closs
                     model.train()
                     writer.add_scalars("Loss",
                                        {
@@ -139,6 +155,7 @@ def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=26, ratio=0.2):
                                            "Valid Loss": round(val_loss.detach().cpu().numpy().ravel()[0] / 20, 4),
                                        }
                                        , step)
+                    print(outputs['results'])
                     writer.add_scalars("Metrics", outputs['results'], step)
                     val_track.append(round(val_loss.detach().cpu().numpy().ravel()[0] / eval_step, 4))
                     running_loss = 0
@@ -147,12 +164,14 @@ def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=26, ratio=0.2):
                     if early_stopping.early_stop:
                         print("Stopping early")
                         writer.close()
+                        os.chdir('..')
                         return
-                    conf_mat = (confmat(
-                        torch.tensor(all_tags), torch.tensor(all_predicted_tags)
-                    ))
-                    mat = pd.DataFrame(conf_mat.numpy(), columns=mconern.keys(), dtype=int)
-                    mat["idx"] = mconern.keys()
-                    mat.to_csv(f'confusion_mat{step}.csv', index=False)
+                    # conf_mat = (confmat(
+                    #     torch.tensor(all_tags), torch.tensor(all_predicted_tags)
+                    # ))
+                    # mat = pd.DataFrame(conf_mat.numpy(), columns=mconern.keys(), dtype=int)
+                    # mat["idx"] = mconern.keys()
+                    # mat.to_csv(f'confusion_mat{step}.csv', index=False)
     writer.close()
+    os.chdir('..')
 
