@@ -1,5 +1,7 @@
 import sys
+import gc
 import numpy as np
+import random
 import torch
 from torch import nn
 from torch.nn import LSTM, LSTMCell
@@ -52,12 +54,11 @@ if torch.cuda.is_available():
     device = 'cuda'
 HIDDEN = 128
 DROP_OUT = 0.2
-NUM_EPOCH = 10
+NUM_EPOCH = 20
 cps = 1500
-model = CustomLSTM(sd.num_char+1, HIDDEN, num_layers=1, dropout=DROP_OUT).to(device)
+model = CustomLSTM(sd.num_char+1, HIDDEN, num_layers=2, dropout=DROP_OUT).to(device)
 optim = AdamW(model.parameters(), lr=1e-3)
 criterion = nn.CrossEntropyLoss()
-import random
 
 early_stopping = EarlyStopping(patience=10, verbose=True, path='lstm_model.pt')
 num = random.randint(1, 100)
@@ -83,14 +84,16 @@ for epoch in range(NUM_EPOCH):
             # output = model(x.view(x.size(0), -1, 1).to(device))
             output = model(x.to(device))
             x.cpu()
+            del x
             # print(output.shape)
             loss = criterion(output.cpu(), torch.tensor(y))
             # print(loss)
-            running_loss += loss
+            running_loss += loss.item()
             loss.backward()
             optim.step()
             step += 1
-
+    torch.clear_autocast_cache()
+    gc.collect()
             # if ((step + 1) % cps) == 0:
                 # # Calculate validation loss
     print("Validating the Model")
@@ -98,21 +101,27 @@ for epoch in range(NUM_EPOCH):
         # tepoch.set_description(f"Valid Epoch {epoch}")
     model.eval()
     with torch.no_grad():
-        valid_loss = 0
-        out_all =[]
-        y_all = []
-        for i, data in enumerate(validloader):
-            x, y = data
-            y = torch.tensor(y)
-            # output = model(x.view(x.size(0), -1, 1).to(device))
-            output = model(x.to(device))
-            x.cpu()
-            # print(output.shape, y.shape)
-            y_all.append(y)
-            out_all.append(output.cpu())
-            valid_loss += criterion(output.cpu(), y)
-    print(confmat(torch.argmax(torch.softmax(torch.cat(out_all), dim=1), dim=1),
-                           torch.cat(y_all)),
+        with tqdm(validloader, unit='batch') as tepoch:
+            tepoch.set_description(f"Epoch {epoch}")
+            valid_loss = 0
+            out_all =[]
+            y_all = []
+            for i, data in enumerate(tepoch):
+                x, y = data
+                y = torch.tensor(y)
+                # output = model(x.view(x.size(0), -1, 1).to(device))
+                output = model(x.to(device))
+                x.cpu()
+                del x
+                # print(output.shape, y.shape)
+                y_all.append(y)
+                out_all.append(output.cpu())
+                valid_loss += criterion(output.cpu(), y).item()
+                # torch.clear_autocast_cache()
+        for i in confmat(torch.argmax(torch.softmax(torch.cat(out_all), dim=1), dim=1),
+                           torch.cat(y_all)):
+            print(i)
+        print(
           pred(torch.argmax(torch.softmax(torch.cat(out_all), dim=1), dim=1),
                            torch.cat(y_all)),
           recall(torch.argmax(torch.softmax(torch.cat(out_all), dim=1), dim=1),

@@ -14,7 +14,7 @@ class Serialdata(Dataset):
         self.all_data = pd.read_csv(filedir, sep='\t').dropna()
         self.classes = self.all_data['label'].unique()
         self.num_classes = len(self.classes)
-        # self.all_data = self.all_data[:10000]
+        # self.all_data = self.all_data[:500000]
         self.tag_to_id = {v: k for k, v in enumerate(self.classes)}
         self.all_data['mapped'] = self.all_data['combined'].apply(self.unicodeToAscii)
         self.all_chars_dict = {v: k for k, v in enumerate(self.all_chars)}
@@ -34,7 +34,7 @@ class Serialdata(Dataset):
                 temp = map(lambda a: self.all_chars_dict.get(a, self.num_char), i)
                 self.all_instances.append((torch.tensor(list(temp)), self.tag_to_id[j]))
         else:
-            for i, j in zip(self.train['mapped'].to_list(), self.train['label'].to_list()):
+            for i, j in zip(self.test['mapped'].to_list(), self.test['label'].to_list()):
                 temp = map(lambda a: self.all_chars_dict.get(a, self.num_char), i)
                 self.all_instances.append((torch.tensor(list(temp)), self.tag_to_id[j]))
         # for i in self.all_instances:

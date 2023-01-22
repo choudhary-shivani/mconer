@@ -18,7 +18,7 @@ SELECT ?minister ?ministerLabel WHERE {
 query_string_art = """
 SELECT ?work ?workLabel ?workDesc WHERE
 {
-  ?work wdt:P31/wdt:P279* wd:Q838948  . # instance of any subclass of work of art
+  ?work wdt:P31/wdt:P279* wd:Q11460  . # instance of any subclass of work of art
   ?work  rdfs:label ?workLabel .
   ?work schema:description ?workDesc  .
    FILTER ( lang(?workLabel) = "en" ).
@@ -35,12 +35,12 @@ SELECT ?work ?workLabel ?workDesc WHERE
 #   ?work rdfs:label ?workLabel. FILTER( LANG(?workLabel)="en" )
 # }LIMIT 2"""
 
-results = return_sparql_query_results(selected_query_literary_work)
+results = return_sparql_query_results(query_string)
 with open('extract.json', 'w') as f:
     json.dump(results, f)
 # print(type(results))
 x = pd.DataFrame.from_dict(results['results']['bindings'])
 x['wlabelCleaned'] = x['workLabel'].apply(lambda x: x['value'])
 x['wdescCleaned'] = x['workDesc'].apply(lambda x: x['value'])
-x.to_csv('extracted-lw.csv', index=False)
+x.to_csv('extracted-clothing.csv', index=False)
 # print(WikidataItem(get_entity_dict_from_api('Q3660440')))
