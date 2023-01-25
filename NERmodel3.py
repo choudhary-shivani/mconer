@@ -20,20 +20,22 @@ class NERmodelbase3(nn.Module):
         self.encoder = AutoModel.from_pretrained(self.encoder_model)
         # self.ratio = torch.nn.init.uniform_(torch.nn.Parameter(torch.randn([2])))
         if use_lstm:
-            self.rnn_dim = 256 // 2
-            # self.birnn = nn.LSTM(256, self.rnn_dim, num_layers=1, bidirectional=True,
-            #                      batch_first=True)
-            self.w_omega = nn.Parameter(torch.Tensor(self.encoder.config.hidden_size + (self.rnn_dim * 2), 1))  # 用于门机制学习的矩阵
+            self.rnn_dim = self.encoder.config.hidden_size // 2
+            self.birnn = nn.LSTM(self.encoder.config.hidden_size, self.rnn_dim, num_layers=1, bidirectional=True,
+                                 batch_first=True)
+            # self.birnn = nn.Linear(256, self.rnn_dim * 2)
+            self.w_omega = nn.Parameter(
+                torch.Tensor(self.encoder.config.hidden_size + (self.rnn_dim * 2), 1))  # 用于门机制学习的矩阵
             nn.init.uniform(self.w_omega, -0.1, 0.1)
 
         self.ff1 = nn.Linear(in_features=self.encoder.config.hidden_size,
-                             out_features=self.encoder.config.hidden_size//2)
-        self.ff = nn.Linear(in_features=self.encoder.config.hidden_size//2,
+                             out_features=self.encoder.config.hidden_size // 2)
+        self.ff = nn.Linear(in_features=self.encoder.config.hidden_size // 2,
                             out_features=len(self.id_to_tag))
         self.crf = ConditionalRandomField(num_tags=len(self.id_to_tag),
                                           constraints=allowed_transitions('BIO',
                                                                           labels=self.id_to_tag))
-
+        self.feature_enc = nn.Linear(14, self.encoder.config.hidden_size)
         self.lr = lr
         self.dropout = nn.Dropout(dropout)
         self.spanf1 = SpanF1()
@@ -52,8 +54,14 @@ class NERmodelbase3(nn.Module):
         embedded_text_input = self.encoder(input_ids=tokens, attention_mask=mask)
         embedded_text_input = embedded_text_input.last_hidden_state
         embedded_text_input = self.dropout(F.leaky_relu(embedded_text_input))
+        # tags_encoded = torch.zeros([tags.size(0), tags.size(1), len(self.tag_to_id)]).cuda()
+        # # if mode != 'predict':
+        # tags_encoded = tags_encoded.scatter(-1, tags.view(tags.size(0), -1, 1), 1) # making it one hot encoded vector
+        # tags_encoded[:, :, -1] = 0  # setting 'o' tag as zero
+        # print(tags_encoded)
         if self.use_lstm:
-            bilstm_out, _ = self.birnn(lstm_encoded)
+            tags_encoded = self.feature_enc(lstm_encoded)
+            bilstm_out, _ = self.birnn(tags_encoded)
             temp = torch.cat([embedded_text_input, bilstm_out], dim=-1)
             ratio = torch.sigmoid(torch.matmul(temp, self.w_omega))
             embedded_text_input = ratio * embedded_text_input + (1 - ratio) * bilstm_out
@@ -69,7 +77,7 @@ class NERmodelbase3(nn.Module):
         # compute the log-likelihood loss and compute the best NER annotation sequence
         # print(tags)
         output, all_prob = self._compute_token_tags(token_scores=token_scores, mask=mask, tags=tags,
-                                          metadata=metadata, batch_size=base_shape, mode=mode)
+                                                    metadata=metadata, batch_size=base_shape, mode=mode)
         # print(self.w_omega)
 
         # temp_val = torch.cat([output['loss'].clone().unsqueeze(0).detach(), torch.tensor(focal_loss).unsqueeze(0).to('cuda')], dim=-1)

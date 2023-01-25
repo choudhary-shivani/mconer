@@ -19,11 +19,13 @@ from tensorboardX import SummaryWriter
 # from utils import mconern, encoder_model, tokenizer
 from reader import *
 # from tutils import image_gen
-from NERmodel3 import NERmodelbase3
+# from NERmodel3 import NERmodelbase3
 from tqdm import tqdm
 from kornia.losses import FocalLoss
 from torchmetrics.classification import MulticlassConfusionMatrix, MulticlassRecall, MulticlassPrecision, \
     MulticlassF1Score
+from voting_model import NERmodelbase3
+from torch import autocast
 
 device = 'cpu'
 if torch.cuda.is_available():
@@ -63,8 +65,9 @@ def collate_batch(batch):
     return token_tensor, tag_tensor, mask_tensor, token_masks_tensor, gold_spans, lstm_encoded_tensor
 
 
-def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=100, ratio=0.2):
+def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=100, ratio=5):
     print(fine)
+    scaler = torch.cuda.amp.GradScaler()
     if os.path.exists('train_load.pkl') and not force:
         with open('train_load.pkl', 'rb') as f:
             ds = pickle.load(f)
@@ -98,13 +101,14 @@ def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=100, ratio=0.2):
 
     # next(iter(validloader))
     # sys.exit(2)
-    trainloader = DataLoader(ds, batch_size=BATCH_SIZE, collate_fn=collate_batch, num_workers=0, shuffle=True)
+    trainloader = DataLoader(ds, batch_size=BATCH_SIZE, collate_fn=collate_batch, num_workers=0, shuffle=True,
+                             pin_memory=True)
     model = NERmodelbase3(tag_to_id=mconern, device=device, encoder_model=encoder_model, dropout=0.3, use_lstm=True).to(
         device)
     print(model)
-    WARMUP_STEP = int(len(trainloader) * NUM_EPOCH * 0.1) // 100
+    WARMUP_STEP = int(len(trainloader) * NUM_EPOCH * 0.1) // 50
     print(f"Number of warm up step is {WARMUP_STEP}")
-    optim, scheduler = get_optimizer(model, True, warmup=WARMUP_STEP)
+    optim, scheduler = get_optimizer_voter(model, True, warmup=WARMUP_STEP)
     scheduler2 = ReduceLROnPlateau(optimizer=optim[0], factor=0.1, patience=20, verbose=True, cooldown=20)
 
     run_id = random.randint(1, 10000)
@@ -128,42 +132,35 @@ def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=100, ratio=0.2):
             tepoch.set_description(f"Epoch {epoch}")
             for i, data in enumerate(tepoch):
                 optim[0].zero_grad()
-                outputs, focal_loss, all_prob, token_scores, mask, tags = model(data)
-                loss = 0.2 * outputs['loss'] + 0.8 * focal_loss
-                       # - 0.2 * outputs['results']['micro@F1']
+                with autocast(device_type='cuda', dtype=torch.float16):
+                    outputs, focal_loss, kl_score = model(data)
+                if WARMUP_STEP < 0:
+                    loss = 0.1 * outputs['loss'] + 0.8 * focal_loss + ratio * kl_score
+                else:
+                    loss = 0.1 * outputs['loss'] + 0.8 * focal_loss
                 running_loss += loss
-                loss.backward()
-                optim[0].step()
+                scaler.scale(loss).backward()
+                scaler.step(optim[0])
+                scaler.update()
                 if (step + 1) % 50 == 0:
+                    WARMUP_STEP -= 1
                     scheduler[0].step()
                 # scheduler2.step(loss)
-                # if i % 10 == 0:  # print every 2000 mini-batches
                 model.spanf1.reset()
-                # writer.add_scalar('lr', scheduler2.get_last_lr()[0], step)
-                # writer.add_scalar('lr', scheduler2._last_lr[0], step)
-                # run validation
                 step += 1
                 if (step + 1) % eval_step == 0:
-                    # all_tags = []
-                    # all_predicted_tags = []
                     model.eval()
                     with torch.no_grad():
                         with tqdm(validloader, unit='batch') as tepoch:
                             val_loss = 0
                             for i, data in enumerate(tepoch):
-                                # tokens, tags, mask, token_mask, metadata, lstm_encoded = data
-                                # all_tags += list(torch.masked_select(tags, mask).detach().cpu().numpy())
-                                # print(mask.shape, token_mask.shape)
-                                # all_tags += list(tags.clone().detach().cpu().numpy().ravel())
-                                outputs, focal_loss, all_prob, token_scores, mask, tags = model(data, mode='predict')
-                                # print(outputs['loss'].detach(), focal_loss, focal_loss_v,
-                                #       (0.2 * outputs['loss'].detach() + 0.4 * focal_loss + 0.4 * focal_loss_v))
-                                val_loss += 0.2 * outputs['loss'] + 0.8 * focal_loss
-                                            # - 0.2 * outputs['results']['micro@F1']
-                                # val_loss += (0.2 * outputs['loss'].detach() + 0.4 * focal_loss + 0.4 * focal_loss_v)
-                                # val_loss = closs
+                                outputs, focal_loss, kl_score = model(data, mode='predict')
+                                if WARMUP_STEP < 0:
+                                    val_loss += 0.1 * outputs['loss'] + 0.8 * focal_loss + ratio * kl_score
+                                else:
+                                    val_loss += 0.1 * outputs['loss'] + 0.8 * focal_loss
                     print("\n", outputs['results']['micro@F1'])
-                    # print("\n", val_loss)
+                    print("\n", outputs['loss'], focal_loss, kl_score, WARMUP_STEP)
                     model.train()
                     writer.add_scalars("Loss",
                                        {
@@ -175,14 +172,14 @@ def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=100, ratio=0.2):
                     writer.add_scalars("Metrics", outputs['results'], step)
                     val_track.append(round(val_loss.detach().cpu().numpy().ravel()[0] / len(validloader), 4))
                     running_loss = 0
-                    # if round(outputs['results']['micro@F1'], 6) > 1e-2:
-                    #     early_stopping(-1* round(outputs['results']['micro@F1'], 6), model)
-                    early_stopping(round(val_loss.detach().cpu().numpy().ravel()[0] / len(validloader), 6), model)
-                    if early_stopping.early_stop:
-                        print("Stopping early")
-                        writer.close()
-                        os.chdir('..')
-                        return
+                    if round(outputs['results']['micro@F1'], 6) > 1e-2:
+                        early_stopping(-1 * round(outputs['results']['micro@F1'], 6), model)
+                        # early_stopping(round(val_loss.detach().cpu().numpy().ravel()[0] / len(validloader), 4), model)
+                        if early_stopping.early_stop:
+                            print("Stopping early")
+                            writer.close()
+                            os.chdir('..')
+                            return
                     # conf_mat = (confmat(
                     #     torch.tensor(all_tags), torch.tensor(all_predicted_tags)
                     # ))

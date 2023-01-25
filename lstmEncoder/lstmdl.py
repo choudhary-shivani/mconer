@@ -27,6 +27,6 @@ sd.readLines(train=True)
 vd = Serialdata('combined.tsv')
 vd.readLines(train=False)
 
-trainloader = DataLoader(sd, batch_size=256, collate_fn=collate_batch, shuffle=True)
+trainloader = DataLoader(sd, batch_size=128, collate_fn=collate_batch, shuffle=True)
 validloader = DataLoader(vd, batch_size=256, collate_fn=collate_batch, shuffle=True)
 

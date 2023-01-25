@@ -32,7 +32,7 @@ class CoNLLReader(Dataset):
         self.lstmdata = InferSerialData()
         print("Loding LSTM model")
         self.lstm = CustomLSTM(58, 128, num_layers=2).eval().to('cuda')
-        self.lstm.load_state_dict(torch.load(r'.\lstmEncoder\lstm_model.pt'))
+        self.lstm.load_state_dict(torch.load(r'.\lstmEncoder\t_lstm_model.pt'))
         print(self.fine)
 
     def get_target_size(self):
@@ -73,9 +73,10 @@ class CoNLLReader(Dataset):
 
     def parse_line_for_ner(self, fields):
         tokens_, ner_tags = fields[0], fields[-1]
+        print(tokens_)
         sentence_str, tokens_sub_rep, ner_tags_rep, token_masks_rep, mask, lstm_encoded = self.parse_tokens_for_ner(tokens_, ner_tags)
         gold_spans_ = extract_spans(ner_tags_rep)
-        # print(gold_spans_)
+        # print(ner_tags_rep)
         if not self.fine:
             coded_ner_ = [self.label_to_id[self.reversemap[tag]] if tag in self.reversemap else self.label_to_id['O']
                           for tag in ner_tags_rep]
@@ -131,14 +132,14 @@ class CoNLLReader(Dataset):
         # print("encoded", encoded)
 
         x, y = self.lstm(torch.tensor(encoded))
-        # print(x.shape, y.shape)
+        # print(x.shape, .shape)
         # lstm_encoded = torch.mean(y, dim=0, keepdim=True).squeeze(0)
         # print(lstm_encoded.shape)
         # print(torch.softmax(lstm_encoded, dim=-1))
         # lstm_encoded.append(list(self.lstm.named_children())[0][1](torch.tensor(57).to('cuda')))
         # lstm_encoded = torch.stack(lstm_encoded, dim=2).squeeze(0)
         # print(lstm_encoded.shape)
-        return sentence_str, tokens_sub_rep, ner_tags_rep, token_masks_rep, mask, y.detach().cpu()
+        return sentence_str, tokens_sub_rep, ner_tags_rep, token_masks_rep, mask, x.detach().cpu()
 
 
 if __name__ == '__main__':
@@ -160,11 +161,14 @@ if __name__ == '__main__':
     from tutils import invert, indvidual
     from tutils import mconer_grouped
 
-    fine = False
+    fine = True
     mconern = indvidual(mconer_grouped, fine)
     reveremap = invert(mconer_grouped)
     print(mconern, reveremap)
     ds = CoNLLReader(target_vocab=mconern, finegrained=fine, reversemap=reveremap)
     # # ds.read_data(data=r'C:\Users\Rah12937\PycharmProjects\mconer\multiconer2023\train_dev\en-train.conll')
-    ds.read_data(data=r'C:\Users\Rah12937\PycharmProjects\mconer\multiconer2023\train_dev\en-dev.conll')
-    print(ds[0])
+    ds.read_data(data=r'C:\Users\Rah12937\PycharmProjects\mconer\multiconer2023\train_dev\en_dev_small.conll')
+    for i in range(len(ds.instances)):
+        tokens_tensor, mask_rep, token_masks_rep, gold_spans_, tag_tensor, lstm_encoded = ds.instances[i]
+        print(lstm_encoded.shape)
+        print(torch.argmax(torch.softmax(lstm_encoded, dim=-1), dim=-1), gold_spans_)

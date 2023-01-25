@@ -10,7 +10,8 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from pytorchtools import EarlyStopping
 from lstmdl import trainloader, validloader, sd
-from torchmetrics.classification import MulticlassConfusionMatrix, MulticlassRecall, MulticlassPrecision, MulticlassF1Score
+from torchmetrics.classification import MulticlassConfusionMatrix, MulticlassRecall, MulticlassPrecision, \
+    MulticlassF1Score
 
 
 class CustomLSTM(nn.Module):
@@ -28,22 +29,23 @@ class CustomLSTM(nn.Module):
                          )
         self.dropout = nn.Dropout(0.1)
         print(sd.tag_to_id)
-        self.ff1 = nn.Linear(self.hidden*2, self.hidden)
+        self.ff1 = nn.Linear(self.hidden * 2, self.hidden)
         self.ff = nn.Linear(self.hidden, sd.num_classes)
 
     def forward(self, x):
         batch_size = x.size(0)
         out = self.embed(x)
-        self.h0 = torch.zeros(2*self.num_layers, batch_size, self.hidden, dtype=
+        self.h0 = torch.zeros(2 * self.num_layers, batch_size, self.hidden, dtype=
         torch.float).to(device).requires_grad_()
-        self.c0 = torch.zeros(2*self.num_layers, batch_size, self.hidden,
+        self.c0 = torch.zeros(2 * self.num_layers, batch_size, self.hidden,
                               dtype=torch.float).to(device).requires_grad_()
         # lstm_out, _ = self.lstm(x.view(len(x), 1, -1))
-        out , (self.h0, self.c0) = self.lstm(out, (self.h0, self.c0))
-        # print(out.shape)
-        h_comb = torch.cat([self.h0[-1], self.h0[-2]], dim=-1)
-        # print(h_comb)
+        out, (self.h0, self.c0) = self.lstm(out, (self.h0, self.c0))
+        # print(self.h0.shape)
+        h_comb = torch.cat([self.h0[:self.num_layers], self.h0[self.num_layers:]], dim=-1)[-1]
+        # print(h_comb.shape)
         # val = self.dropout(self.h0.mean(dim=0, keepdim=True))
+        # out = self.ff1(out[:, -1, :])
         out = self.ff1(h_comb)
         out = self.ff(out)
         return out
@@ -56,11 +58,11 @@ HIDDEN = 128
 DROP_OUT = 0.2
 NUM_EPOCH = 20
 cps = 1500
-model = CustomLSTM(sd.num_char+1, HIDDEN, num_layers=2, dropout=DROP_OUT).to(device)
+model = CustomLSTM(sd.num_char + 1, HIDDEN, num_layers=2, dropout=DROP_OUT).to(device)
 optim = AdamW(model.parameters(), lr=1e-3)
 criterion = nn.CrossEntropyLoss()
 
-early_stopping = EarlyStopping(patience=10, verbose=True, path='lstm_model.pt')
+early_stopping = EarlyStopping(patience=10, verbose=True, path='t_lstm_model.pt')
 num = random.randint(1, 100)
 scheduler = torch.optim.lr_scheduler.ExponentialLR(optim, gamma=0.95)
 runid = random.randint(1, 100000)
@@ -94,17 +96,17 @@ for epoch in range(NUM_EPOCH):
             step += 1
     torch.clear_autocast_cache()
     gc.collect()
-            # if ((step + 1) % cps) == 0:
-                # # Calculate validation loss
+    # if ((step + 1) % cps) == 0:
+    # # Calculate validation loss
     print("Validating the Model")
     # with tqdm(validloader, unit='batch') as tepoch:
-        # tepoch.set_description(f"Valid Epoch {epoch}")
+    # tepoch.set_description(f"Valid Epoch {epoch}")
     model.eval()
     with torch.no_grad():
         with tqdm(validloader, unit='batch') as tepoch:
             tepoch.set_description(f"Epoch {epoch}")
             valid_loss = 0
-            out_all =[]
+            out_all = []
             y_all = []
             for i, data in enumerate(tepoch):
                 x, y = data
@@ -119,16 +121,16 @@ for epoch in range(NUM_EPOCH):
                 valid_loss += criterion(output.cpu(), y).item()
                 # torch.clear_autocast_cache()
         for i in confmat(torch.argmax(torch.softmax(torch.cat(out_all), dim=1), dim=1),
-                           torch.cat(y_all)):
+                         torch.cat(y_all)):
             print(i)
         print(
-          pred(torch.argmax(torch.softmax(torch.cat(out_all), dim=1), dim=1),
-                           torch.cat(y_all)),
-          recall(torch.argmax(torch.softmax(torch.cat(out_all), dim=1), dim=1),
-                           torch.cat(y_all)),
-          f1(torch.argmax(torch.softmax(torch.cat(out_all), dim=1), dim=1),
-           torch.cat(y_all))
-          )
+            pred(torch.argmax(torch.softmax(torch.cat(out_all), dim=1), dim=1),
+                 torch.cat(y_all)),
+            recall(torch.argmax(torch.softmax(torch.cat(out_all), dim=1), dim=1),
+                   torch.cat(y_all)),
+            f1(torch.argmax(torch.softmax(torch.cat(out_all), dim=1), dim=1),
+               torch.cat(y_all))
+        )
     # print()
     model.train()
     print('Loss/train', running_loss / len(trainloader), epoch + 1)
@@ -136,7 +138,7 @@ for epoch in range(NUM_EPOCH):
     writer.add_scalars('Loss', {"train": running_loss / cps,
                                 "valid": valid_loss / len(validloader)}, step + 1)
     val_loss_all.append((valid_loss / len(validloader)))
-                # writer.add_scalar('Loss/valid', valid_loss / len(validloader), step + 1)
+    # writer.add_scalar('Loss/valid', valid_loss / len(validloader), step + 1)
     early_stopping(np.mean(val_loss_all), model)
     if early_stopping.early_stop:
         print("Stopping early")

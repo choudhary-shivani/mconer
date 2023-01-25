@@ -14,13 +14,13 @@ class Serialdata(Dataset):
         self.all_data = pd.read_csv(filedir, sep='\t').dropna()
         self.classes = self.all_data['label'].unique()
         self.num_classes = len(self.classes)
-        # self.all_data = self.all_data[:500000]
+        self.all_data = self.all_data[:10000]
         self.tag_to_id = {v: k for k, v in enumerate(self.classes)}
         self.all_data['mapped'] = self.all_data['combined'].apply(self.unicodeToAscii)
         self.all_chars_dict = {v: k for k, v in enumerate(self.all_chars)}
         self.train, self.test = train_test_split(self.all_data, test_size=0.3, shuffle=True, random_state=42)
         self.all_instances = []
-
+        print(self.tag_to_id)
     def unicodeToAscii(self, s):
         return ''.join(
             c for c in unicodedata.normalize('NFD', s)

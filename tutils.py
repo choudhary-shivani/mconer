@@ -132,11 +132,29 @@ def invert(grouped):
 def get_optimizer(net, opt=False, warmup=10):
     lr = 1e-5
     all_params = ({'params': net.encoder.parameters(), 'lr': lr},
-                  {'params': net.ff.parameters(), 'lr': lr*10},
+                  {'params': net.feature_enc.parameters(), 'lr': lr * 10},
+                  {'params': net.ff.parameters(), 'lr': lr * 10},
                   {'params': net.crf.parameters(), 'lr': lr * 100},
                   {'params': net.birnn.parameters(), 'lr': lr * 100},
                   {'params': net.w_omega, 'lr': lr * 10},
                   {'params': net.ff1.parameters(), 'lr': lr * 10},
+                  )
+    optimizer = torch.optim.AdamW(all_params, lr=lr, weight_decay=0.01)
+    if opt:
+        scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup)
+        # scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(optimizer, num_warmup_steps=warmup, num_cycles=2, num)
+        return [optimizer], [scheduler]
+    return [optimizer]
+
+
+def get_optimizer_voter(net, opt=False, warmup=10):
+    lr = 1e-5
+    all_params = ({'params': net.encoder.parameters(), 'lr': lr},
+                  {'params': net.head_1.parameters(), 'lr': lr * 10},
+                  {'params': net.crf.parameters(), 'lr': lr * 100},
+                  {'params': net.head_2.parameters(), 'lr': lr * 10},
+                  # {'params': net.w_omega, 'lr': lr * 10},
+                  # {'params': net.ff1.parameters(), 'lr': lr * 10},
                   )
     optimizer = torch.optim.AdamW(all_params, lr=lr, weight_decay=0.01)
     if opt:
@@ -155,7 +173,6 @@ class IntHandler:
 
 
 def image_gen(computed_confusion, mconern):
-
     # confusion matrix
     df_cm = pd.DataFrame(
         computed_confusion.numpy(),

@@ -40,8 +40,9 @@ class CustomLSTM(nn.Module):
                               dtype=torch.float).to(device).requires_grad_()
         # lstm_out, _ = self.lstm(x.view(len(x), 1, -1))
         out, (self.h0, self.c0) = self.lstm(out, (self.h0, self.c0))
-        print(self.h0.shape)
-        h_comb = torch.cat([self.h0[-1], self.h0[-2]], dim=-1)
+        # print(self.h0.shape)
+        # h_comb = torch.cat([self.h0[-1], self.h0[-2]], dim=-1)
+        h_comb = torch.cat([self.h0[:self.num_layers], self.h0[self.num_layers:]], dim=-1)[-1]
         # print(h_comb)
         # val = self.dropout(self.h0.mean(dim=0, keepdim=True))
         out = self.ff1(h_comb)

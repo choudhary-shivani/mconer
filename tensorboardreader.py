@@ -61,7 +61,7 @@ def convert_tb_data(root_dir, sort_by=None):
 
 
 if __name__ == "__main__":
-    dir_path = r"C:\Users\Rah12937\PycharmProjects\mconer\old run"
+    dir_path = r"C:\Users\Rah12937\PycharmProjects\mconer\runid_3568_EP_20_fine_xlm-b-birnnn-fl-0.8-sep_lr-alpha-2-gama-4"
     import os
     os.chdir(dir_path)
     for file in glob.glob(r'runid_*'):
