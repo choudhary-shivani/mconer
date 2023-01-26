@@ -14,10 +14,17 @@ class DecoderHead(nn.Module):
     def __init__(self, hidden_size, id_to_tag):
         super(DecoderHead, self).__init__()
         self.id_to_tag = id_to_tag
+        # self.rnn_dim = hidden_size // 2
+        # self.birnn = nn.LSTM(14, self.rnn_dim, num_layers=1, bidirectional=True,
+        #                      batch_first=True)
+        # # self.birnn = nn.Linear(14, self.rnn_dim * 2)
+        # self.w_omega = nn.Parameter(
+        #     torch.Tensor(hidden_size + (self.rnn_dim * 2), 1))  # 用于门机制学习的矩阵
+        # nn.init.uniform_(self.w_omega, -0.1, 0.1)
         self.rnn_dim = hidden_size // 2
-        self.birnn = nn.LSTM(14, self.rnn_dim, num_layers=1, bidirectional=True,
+        self.birnn = nn.LSTM(hidden_size, self.rnn_dim, num_layers=1, bidirectional=True,
                              batch_first=True)
-        # self.birnn = nn.Linear(14, self.rnn_dim * 2)
+        # self.birnn = nn.Linear(256, self.rnn_dim * 2)
         self.w_omega = nn.Parameter(
             torch.Tensor(hidden_size + (self.rnn_dim * 2), 1))  # 用于门机制学习的矩阵
         nn.init.uniform_(self.w_omega, -0.1, 0.1)
@@ -26,10 +33,12 @@ class DecoderHead(nn.Module):
                              out_features=hidden_size // 2)
         self.ff = nn.Linear(in_features=hidden_size // 2,
                             out_features=len(self.id_to_tag))
+        self.feature_enc = nn.Linear(72, hidden_size)
         self.fl = FocalLoss(alpha=2, gamma=5, reduction='mean')
 
     def forward(self, embedded_text_input, lstm_encoded, tags):
-        bilstm_out, _ = self.birnn(lstm_encoded)
+        tags_encoded = self.feature_enc(lstm_encoded)
+        bilstm_out, _ = self.birnn(tags_encoded)
         temp = torch.cat([embedded_text_input, bilstm_out], dim=-1)
         ratio = torch.sigmoid(torch.matmul(temp, self.w_omega))
         embedded_text_input = ratio * embedded_text_input + (1 - ratio) * bilstm_out
@@ -52,20 +61,6 @@ class NERmodelbase3(nn.Module):
         self.encoder = AutoModel.from_pretrained(self.encoder_model)
         # self.encoder2 = AutoModel.from_pretrained(self.encoder_model, hidden_dropout_prob=0.3,
         #                                           attention_probs_dropout_prob=0.25)
-        # self.ratio = torch.nn.init.uniform_(torch.nn.Parameter(torch.randn([2])))
-        # if use_lstm:
-        #     self.rnn_dim = self.encoder.config.hidden_size // 2
-        #     self.birnn = nn.LSTM(14, self.rnn_dim, num_layers=1, bidirectional=True,
-        #                          batch_first=True)
-        #     # self.birnn = nn.Linear(256, self.rnn_dim * 2)
-        #     self.w_omega = nn.Parameter(
-        #         torch.Tensor(self.encoder.config.hidden_size + (self.rnn_dim * 2), 1))  # 用于门机制学习的矩阵
-        #     nn.init.uniform(self.w_omega, -0.1, 0.1)
-        #
-        # self.ff1 = nn.Linear(in_features=self.encoder.config.hidden_size,
-        #                      out_features=self.encoder.config.hidden_size // 2)
-        # self.ff = nn.Linear(in_features=self.encoder.config.hidden_size // 2,
-        #                     out_features=len(self.id_to_tag))
         self.crf = ConditionalRandomField(num_tags=len(self.id_to_tag),
                                           constraints=allowed_transitions('BIO',
                                                                           labels=self.id_to_tag))

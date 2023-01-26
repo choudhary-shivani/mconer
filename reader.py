@@ -2,7 +2,7 @@ import os.path
 import pickle
 import torch
 
-from dataloader import CoNLLReader
+# from dataloader import CoNLLReader
 from tutils import *
 import numpy as np
 from NERmodel import NERmodelbase

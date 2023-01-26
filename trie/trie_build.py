@@ -11,7 +11,12 @@ from torch.utils.data import TensorDataset
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-
+all_tags = ['VisualWork', 'MusicalWork', 'WrittenWork', 'ArtWork', 'Software',
+            'OtherCW', 'Facility', 'OtherLOC', 'HumanSettlement', 'Station', 'MusicalGRP',
+            'PublicCorp', 'PrivateCorp', 'OtherCorp', 'AerospaceManufacturer', 'SportsGRP',
+            'CarManufacturer', 'TechCorp', 'ORG', 'Scientist', 'Artist', 'Athlete', 'Politician', 'Cleric',
+            'SportsManager', 'OtherPER', 'Clothing', 'Vehicle', 'Food', 'Drink', 'OtherPROD', 'Medication/Vaccine',
+            'MedicalProcedure', 'AnatomicalStructure', 'Symptom', 'Disease']
 
 class TrieNode(object):
     def __init__(self, value=None):
@@ -115,13 +120,15 @@ def build_ac_trie(feature_file):
         return "open feature file [" + feature_file + "] error!", None
     all_data = pd.read_csv(feature_file).dropna()
     relvant_data = []
-    for i in all_data['workLabel'].to_list():
+    x = all_data['workLabel'].to_list()
+    # print(x)
+    for i in x:
         for j in i.lower().split(' '):
             if len(j) > 2:
                 relvant_data.append(j)
-    print(relvant_data)
+    # print(relvant_data)
     t = Trie(relvant_data)
-    print(t.search('jet'))
+    # print(t.search('jet'))
     # try:
     #     for _, line in enumerate(f):
     #         line = line.strip()
@@ -131,7 +138,7 @@ def build_ac_trie(feature_file):
     #     ac_trie = Trie(text_words)
     # except:
     #     return "build ac trie for [" + feature_file + "] error!", None
-    # return "", ac_trie
+    return "", t
 
 
 def format_query_by_features(text, feature_dim,
@@ -145,7 +152,7 @@ def format_query_by_features(text, feature_dim,
     for fea_name, fea_trie in feature_ac_trie.items():
 
         feature_list = fea_trie.search(text)
-
+        # print(feature_list)
         B_fea = "B-" + fea_name
 
         I_fea = "I-" + fea_name
@@ -163,19 +170,40 @@ def format_query_by_features(text, feature_dim,
                     tmp_fea[i].append(feature_dict[I_fea])
             else:
                 return "get feature error", []
-
+    # print(fea)
     fea = np.ones((seq_length, feature_dim)) * 0
-    print(tmp_fea)
+    # print(tmp_fea)
     for idx in range(seq_length):
         if idx > len(text) - 1:
             break
-        print(tmp_fea[idx])
+        # print(tmp_fea[idx])
         for fea_idx in range(len(tmp_fea[idx])):
-
             if tmp_fea[idx][fea_idx] > feature_dim - 1:
                 return "feature idx biger than feature dim", []
             fea[idx][tmp_fea[idx][fea_idx]] = 1
 
     return fea
+
+def build_trees():
+    import glob
+    all_pickle = {}
+    for file in glob.glob(r'C:\Users\Rah12937\PycharmProjects\mconer\extracted-*'):
+        print(file)
+        class_name = file.split('-')[-1].split('.')[0]
+        _ , all_pickle[class_name] = build_ac_trie(file)
+    return all_pickle
+
 if __name__ == '__main__':
-    build_ac_trie('../extracted-air.csv')
+    import dill as pickle
+    from tutils import indvidual, mconer_grouped
+    # import pickle
+    import glob
+    all_pickle = {}
+    for file in glob.glob('../extracted-*')[:1]:
+        print(file)
+        class_name = file.split('-')[-1].split('.')[0]
+        _ , all_pickle[class_name] = build_ac_trie(file)
+    p = indvidual(mconer_grouped)
+    print(p)
+    fea = format_query_by_features('ssjet', 73,p, all_pickle,  1)
+    print(fea)

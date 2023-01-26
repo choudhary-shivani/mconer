@@ -44,7 +44,7 @@ class SpanF1(Metric):
         all_tags.update(self._FP.keys())
         all_tags.update(self._GT.keys())
         all_metrics = {}
-
+        macro = 0
         for tag in all_tags:
             precision, recall, f1_measure = self.compute_prf_metrics(true_positives=self._TP[tag],
                                                                      false_negatives=self._GT[tag] - self._TP[tag],
@@ -52,7 +52,8 @@ class SpanF1(Metric):
             all_metrics['P@{}'.format(tag)] = precision
             all_metrics['R@{}'.format(tag)] = recall
             all_metrics['F1@{}'.format(tag)] = f1_measure
-
+            macro += f1_measure
+        macro = (macro /len(all_tags))
         # Compute the precision, recall and f1 for all spans jointly.
         precision, recall, f1_measure = self.compute_prf_metrics(true_positives=sum(self._TP.values()),
                                                                  false_positives=sum(self._FP.values()),
@@ -60,6 +61,7 @@ class SpanF1(Metric):
         all_metrics["micro@P"] = precision
         all_metrics["micro@R"] = recall
         all_metrics["micro@F1"] = f1_measure
+        all_metrics["macro@F1"] = macro
 
         if self._num_gold_mentions == 0:
             entity_recall = 0.0

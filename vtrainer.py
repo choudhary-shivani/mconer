@@ -47,9 +47,11 @@ def collate_batch(batch):
     tag_tensor = torch.empty(size=(len(tokens), max_len), dtype=torch.long).fill_(mconern['O'])
     mask_tensor = torch.zeros(size=(len(tokens), max_len), dtype=torch.bool)
     token_masks_tensor = torch.zeros(size=(len(tokens), max_len), dtype=torch.bool)
-    lstm_encoded_tensor = torch.zeros(size=(len(tokens), max_len, 14), dtype=torch.float)
-    # print(lstm_encoded)
+    lstm_encoded_tensor = torch.zeros(size=(len(tokens), max_len, 72), dtype=torch.float)
+    # lstm_encoded = torch.tensor(lstm_encoded)
+    # print(lstm_encoded.shape)
     for i in range(len(tokens)):
+        temp = torch.tensor(lstm_encoded[i])
         tokens_ = tokens[i]
         seq_len = len(tokens_)
 
@@ -59,8 +61,8 @@ def collate_batch(batch):
         token_masks_tensor[i, :seq_len] = token_masks[i]
         # lstm_encoded_tensor[i, 1:seq_len - 1, :] = lstm_encoded[i]
         # modifying so that each word has separate token
-        for j in range(lstm_encoded[i].size(0)):
-            lstm_encoded_tensor[i, j, :] = lstm_encoded[i][j]
+        for j in range(temp.__len__()):
+            lstm_encoded_tensor[i, j, :] = temp[j]
     # print(lstm_encoded_tensor)
     return token_tensor, tag_tensor, mask_tensor, token_masks_tensor, gold_spans, lstm_encoded_tensor
 
@@ -86,16 +88,6 @@ def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=100, ratio=5):
         valid.read_data(data=r'C:\Users\Rah12937\PycharmProjects\mconer\multiconer2023\train_dev\en-dev.conll')
         with open('valid_load.pkl', 'wb') as f:
             pickle.dump(valid, f)
-
-    # confmat = MulticlassConfusionMatrix(num_classes=len(mconern))
-    # pred = MulticlassPrecision(num_classes=len(mconern), average=None)
-    # recall = MulticlassRecall(num_classes=len(mconern), average=None)
-    # f1 = MulticlassF1Score(num_classes=len(mconern), average=None)
-    # test = CoNLLReader(target_vocab=mconern, encoder_model=encoder_model)
-    # test.read_data(data=r'C:\Users\Rah12937\PycharmProjects\mconern\multiconer2022\EN-English\en_dev.conll')
-
-    # model = NERmodelbase(tag_to_id=mconern, device=device, encoder_model=encoder_model,
-    #                      dropout=0.3, use_lstm=False).to(device)
 
     validloader = DataLoader(valid, batch_size=BATCH_SIZE, collate_fn=collate_batch, num_workers=0)
 
@@ -180,11 +172,5 @@ def trainer(NUM_EPOCH, BATCH_SIZE, fine, force, eval_step=100, ratio=5):
                             writer.close()
                             os.chdir('..')
                             return
-                    # conf_mat = (confmat(
-                    #     torch.tensor(all_tags), torch.tensor(all_predicted_tags)
-                    # ))
-                    # mat = pd.DataFrame(conf_mat.numpy(), columns=mconern.keys(), dtype=int)
-                    # mat["idx"] = mconern.keys()
-                    # mat.to_csv(f'confusion_mat{step}.csv', index=False)
     writer.close()
     os.chdir('..')

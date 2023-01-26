@@ -1,6 +1,6 @@
 import argparse
-from trainer import trainer
-# from vtrainer import trainer
+# from trainer import trainer
+from vtrainer import trainer
 
 def parse_args():
     p = argparse.ArgumentParser(description='Model configuration.', add_help=False)

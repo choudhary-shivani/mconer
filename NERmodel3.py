@@ -35,12 +35,12 @@ class NERmodelbase3(nn.Module):
         self.crf = ConditionalRandomField(num_tags=len(self.id_to_tag),
                                           constraints=allowed_transitions('BIO',
                                                                           labels=self.id_to_tag))
-        self.feature_enc = nn.Linear(14, self.encoder.config.hidden_size)
+        self.feature_enc = nn.Linear(72, self.encoder.config.hidden_size)
         self.lr = lr
         self.dropout = nn.Dropout(dropout)
         self.spanf1 = SpanF1()
         self.device = device
-        self.fl = FocalLoss(alpha=2, gamma=5, reduction='mean')
+        self.fl = FocalLoss(alpha=2, gamma=8, reduction='mean')
         self.use_lstm = use_lstm
 
     def forward(self, x, mode=''):

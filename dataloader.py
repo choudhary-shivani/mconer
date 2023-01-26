@@ -8,8 +8,9 @@ from transformers import AutoTokenizer
 from utils.reader_utils import _assign_ner_tags, get_ner_reader, extract_spans
 from lstmEncoder.customlstm import CustomLSTM
 from lstmEncoder.Inferserial import InferSerialData
+from trie.trie_build import build_trees, format_query_by_features
 
-
+# all_tree = build_trees()
 class CoNLLReader(Dataset):
     def __init__(self, max_instances: object = -1, max_length: object = 50, target_vocab: object = None,
                  pretrained_dir: object = '',
@@ -31,8 +32,9 @@ class CoNLLReader(Dataset):
         self.reversemap = reversemap
         self.lstmdata = InferSerialData()
         print("Loding LSTM model")
-        self.lstm = CustomLSTM(58, 128, num_layers=2).eval().to('cuda')
-        self.lstm.load_state_dict(torch.load(r'.\lstmEncoder\t_lstm_model.pt'))
+        # self.lstm = CustomLSTM(58, 128, num_layers=2).eval().to('cuda')
+        # self.lstm.load_state_dict(torch.load(r'.\lstmEncoder\t_lstm_model.pt'))
+        # self.all_tree = build_trees()
         print(self.fine)
 
     def get_target_size(self):
@@ -59,7 +61,7 @@ class CoNLLReader(Dataset):
                 break
             sentence_str, tokens_sub_rep, token_masks_rep, coded_ner_, gold_spans_, mask, lstm_encoded = self.parse_line_for_ner(
                 fields=fields)
-            # print(sentence_str, tokens_sub_rep, token_masks_rep, coded_ner_, gold_spans_, mask)
+            print(sentence_str, gold_spans_)
             tokens_tensor = torch.tensor(tokens_sub_rep, dtype=torch.long)
             tag_tensor = torch.tensor(coded_ner_, dtype=torch.long).unsqueeze(0)
             token_masks_rep = torch.tensor(token_masks_rep)
@@ -73,7 +75,7 @@ class CoNLLReader(Dataset):
 
     def parse_line_for_ner(self, fields):
         tokens_, ner_tags = fields[0], fields[-1]
-        print(tokens_)
+        # print(tokens_)
         sentence_str, tokens_sub_rep, ner_tags_rep, token_masks_rep, mask, lstm_encoded = self.parse_tokens_for_ner(tokens_, ner_tags)
         gold_spans_ = extract_spans(ner_tags_rep)
         # print(ner_tags_rep)
@@ -97,21 +99,35 @@ class CoNLLReader(Dataset):
         sentence_str = ''
         tokens_sub_rep, ner_tags_rep = [self.pad_token_id], ['O']
         token_masks_rep = [False]
+        build_feature_rep = [[0] * (len(self.label_to_id)-1) ]
         for idx, token in enumerate(tokens_):
             if self._max_length != -1 and len(tokens_sub_rep) > self._max_length:
                 break
+            kb_feature = format_query_by_features(token, len(self.label_to_id)-1,
+                                                  self.label_to_id, all_tree, 1)
+            build_feature_rep.append(list(kb_feature[0]))
+
             sentence_str += ' ' + ' '.join(self.tokenizer.tokenize(token.lower()))
             rep_ = self.tokenizer(token.lower())['input_ids']
             rep_ = rep_[1:-1]
             tokens_sub_rep.extend(rep_)
 
+            if len(rep_) > 1:
+                # rotate the array as the labels are adjacent
+                # print(list(kb_feature[0]))
+                rot_feat = np.roll(kb_feature[0], 1)
+                # [((kb_feature[0][-1] + kb_feature[0][:-1]]) * (len(rep_) - 1)
+                build_feature_rep += ([list(rot_feat)] * (len(rep_) -1))
+                # build_feature_rep += rot_feat
             # if we have a NER here, in the case of B, the first NER tag is the B tag, the rest are I tags.
             ner_tag = ner_tags[idx]
             tags, masks = _assign_ner_tags(ner_tag, rep_)
 
             ner_tags_rep.extend(tags)
             token_masks_rep.extend(masks)
-
+            # print(token, rep_)
+            # print(len(tokens_sub_rep))
+            # print(len(build_feature_rep))
         tokens_sub_rep.append(self.pad_token_id)
         ner_tags_rep.append('O')
         token_masks_rep.append(False)
@@ -119,19 +135,24 @@ class CoNLLReader(Dataset):
         sent = ''
         # lstm_encoded.append(list(self.lstm.named_children())[0][1](torch.tensor(57).to('cuda')))
         # print(lstm_encoded)
-        # print(sentence_str.split())
-        all_sent_piece = []
-        for i in sentence_str.split():
-            sent += i
-            all_sent_piece.append(deepcopy(sent))
-        all_converted = self.lstmdata.convert(all_sent_piece)
-        all_converted = [torch.tensor([])] + all_converted
-        all_converted.append(torch.tensor([]))
-        encoded = pad_sequence(all_converted, padding_value=57, batch_first=True).int()
+        build_feature_rep.append(
+            ([0] * (len(self.label_to_id)-1))
+                                 )
+        # print(sentence_str)
+        # print(build_feature_rep.__len__(), len(tokens_sub_rep))
+        # print(build_feature_rep)
+        # all_sent_piece = []
+        # for i in sentence_str.split():
+        #     sent += i
+        #     all_sent_piece.append(deepcopy(sent))
+        # all_converted = self.lstmdata.convert(all_sent_piece)
+        # all_converted = [torch.tensor([])] + all_converted
+        # all_converted.append(torch.tensor([]))
+        # encoded = pad_sequence(all_converted, padding_value=57, batch_first=True).int()
         # print(len(tokens_sub_rep))
         # print("encoded", encoded)
 
-        x, y = self.lstm(torch.tensor(encoded))
+        # x, y = self.lstm(torch.tensor(encoded))
         # print(x.shape, .shape)
         # lstm_encoded = torch.mean(y, dim=0, keepdim=True).squeeze(0)
         # print(lstm_encoded.shape)
@@ -139,7 +160,8 @@ class CoNLLReader(Dataset):
         # lstm_encoded.append(list(self.lstm.named_children())[0][1](torch.tensor(57).to('cuda')))
         # lstm_encoded = torch.stack(lstm_encoded, dim=2).squeeze(0)
         # print(lstm_encoded.shape)
-        return sentence_str, tokens_sub_rep, ner_tags_rep, token_masks_rep, mask, x.detach().cpu()
+        # x = torch.tensor([1,2,3])
+        return sentence_str, tokens_sub_rep, ner_tags_rep, token_masks_rep, mask, build_feature_rep
 
 
 if __name__ == '__main__':
@@ -170,5 +192,6 @@ if __name__ == '__main__':
     ds.read_data(data=r'C:\Users\Rah12937\PycharmProjects\mconer\multiconer2023\train_dev\en_dev_small.conll')
     for i in range(len(ds.instances)):
         tokens_tensor, mask_rep, token_masks_rep, gold_spans_, tag_tensor, lstm_encoded = ds.instances[i]
-        print(lstm_encoded.shape)
-        print(torch.argmax(torch.softmax(lstm_encoded, dim=-1), dim=-1), gold_spans_)
+        # print(lstm_encoded.shape)
+        # print(torch.argmax(torch.softmax(lstm_encoded, dim=-1), dim=-1), gold_spans_)
+        print(torch.tensor(lstm_encoded), len(tokens_tensor))
